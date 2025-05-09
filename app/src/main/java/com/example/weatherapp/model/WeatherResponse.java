@@ -54,6 +54,9 @@ public class WeatherResponse {
 
     // Added the Hourly data model for the hourly forecast
     public static class Hourly {
+        @SerializedName("pop")
+        public double pop; // Probability of precipitation for the hour
+
         @SerializedName("dt")
         public long dt; // Timestamp for the hour
 
@@ -61,9 +64,12 @@ public class WeatherResponse {
         public double temp; // Temperature for the hour
 
         @SerializedName("weather")
-        public List<Weather> weather; // Weather description for the hour
+        public List<MockData.Hourly.Weather> weather; // Weather description for the hour
 
         @SerializedName("wind_speed")
         public double windSpeed; // Wind speed for the hour
+
+        public static class Weather extends MockData.Hourly.Weather {
+        }
     }
 }

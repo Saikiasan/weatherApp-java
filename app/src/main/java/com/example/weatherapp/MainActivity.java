@@ -1,17 +1,22 @@
 package com.example.weatherapp;
 
 import android.Manifest;
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.location.Location;
 import android.location.LocationManager;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.os.Bundle;
+import android.os.Looper;
 import android.provider.Settings;
 import android.util.Log;
+import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 import androidx.annotation.NonNull;
@@ -21,10 +26,15 @@ import androidx.core.content.ContextCompat;
 
 import android.content.pm.PackageManager;
 
+import com.example.weatherapp.model.MockWeatherData;
 import com.example.weatherapp.model.WeatherResponse;
 import com.example.weatherapp.network.ApiClient;
 import com.example.weatherapp.network.WeatherApiService;
 import com.google.android.gms.location.*;
+
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
 
 import retrofit2.Call;
 import retrofit2.Callback;
@@ -61,6 +71,12 @@ public class MainActivity extends AppCompatActivity {
                 requestLocationPermission();
             }
         }
+        View statLayout = findViewById(R.id.status_indicator);
+
+        statLayout.postDelayed(() -> {
+            statLayout.setVisibility(View.GONE); // or View.INVISIBLE
+        }, 3000); // 1000 milliseconds = 1 second
+
     }
 
     private boolean checkPermissions() {
@@ -92,25 +108,46 @@ public class MainActivity extends AppCompatActivity {
         startActivity(new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS));
     }
 
-    private void fetchLocation() {
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
-                != PackageManager.PERMISSION_GRANTED &&
-                ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION)
-                        != PackageManager.PERMISSION_GRANTED) {
-            // You can request permission again or handle the case
-            Toast.makeText(this, "Location permission not granted", Toast.LENGTH_SHORT).show();
-            return;
-        }
-
-        fusedLocationClient.getLastLocation()
-                .addOnSuccessListener(location -> {
-                    if (location != null) {
-                        double lat = location.getLatitude();
-                        double lon = location.getLongitude();
-                        fetchWeatherData(lat, lon);  // Fetch weather data
-                    }
-                });
+private void fetchLocation() {
+    if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
+            != PackageManager.PERMISSION_GRANTED &&
+            ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION)
+                    != PackageManager.PERMISSION_GRANTED) {
+        Toast.makeText(this, "Location permission not granted", Toast.LENGTH_SHORT).show();
+        return;
     }
+
+    fusedLocationClient.getLastLocation()
+            .addOnSuccessListener(location -> {
+                if (location != null) {
+                    double lat = location.getLatitude();
+                    double lon = location.getLongitude();
+                    fetchWeatherData(lat, lon);
+                } else {
+                    // Request a new location if last location is null
+                    LocationRequest locationRequest = LocationRequest.create()
+                            .setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY)
+                            .setInterval(10000)
+                            .setFastestInterval(5000)
+                            .setNumUpdates(1);
+
+                    fusedLocationClient.requestLocationUpdates(locationRequest, new LocationCallback() {
+                        @Override
+                        public void onLocationResult(LocationResult locationResult) {
+                            if (locationResult == null) {
+                                Toast.makeText(MainActivity.this, "Unable to retrieve location", Toast.LENGTH_SHORT).show();
+                                return;
+                            }
+                            Location location1 = locationResult.getLastLocation();
+                            double lat = location1.getLatitude();
+                            double lon = location1.getLongitude();
+                            fetchWeatherData(lat, lon);
+                        }
+                    }, Looper.getMainLooper());
+                }
+            });
+}
+
 
     private void fetchWeatherData(double lat, double lon) {
         WeatherApiService weatherApiService = ApiClient.getWeatherApiService();
@@ -135,6 +172,7 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
+    @SuppressLint("SetTextI18n")
     private void updateUI(WeatherResponse weatherResponse) {
         Log.d("WeatherApp", "Weather data: " + weatherResponse);
         // Set city name
@@ -147,7 +185,10 @@ public class MainActivity extends AppCompatActivity {
 
         // Set weather condition
         TextView condition = findViewById(R.id.weather_condition);
-        condition.setText(weatherResponse.weather.get(0).description);
+        String weatherDescription = weatherResponse.weather.get(0).description;
+        String capitalizedDescription = weatherDescription.substring(0, 1).toUpperCase() + weatherDescription.substring(1);
+        condition.setText(capitalizedDescription);
+
 
         // Set wind speed
         TextView windSpeed = findViewById(R.id.wind_speed);
@@ -157,9 +198,14 @@ public class MainActivity extends AppCompatActivity {
         TextView humidity = findViewById(R.id.humidity);
         humidity.setText(weatherResponse.main.humidity + "%");
 
-        // Set rain chances (if available)
         TextView rainChances = findViewById(R.id.rain_chances);
-        rainChances.setText("N/A"); // Update this if rain data is available from the API
+        if (weatherResponse.hourly != null && !weatherResponse.hourly.isEmpty()) {
+            double pop = weatherResponse.hourly.get(0).pop; // e.g., 0.6
+            int rainPercent = (int) (pop * 100);
+            rainChances.setText(rainPercent + "%");
+        } else {
+            rainChances.setText("-");
+        }
 
         // Set weather icon (if available)
         String iconCode = weatherResponse.weather.get(0).icon;
@@ -167,9 +213,55 @@ public class MainActivity extends AppCompatActivity {
         ImageView weatherIcon = findViewById(R.id.current_weather_icon);
         weatherIcon.setImageResource(iconResId);
 
-        // Set the date (you can use the current date or fetch it dynamically)
         TextView date = findViewById(R.id.day_date_month);
-        date.setText("Monday, 29 Mayeyufs"); // Change this to dynamic date if needed
+        SimpleDateFormat sdf = new SimpleDateFormat("EEEE, dd MMMM", Locale.getDefault());
+        String currentDate = sdf.format(new Date());
+        date.setText(currentDate);
+
+
+        LinearLayout hourlyContainer = findViewById(R.id.hourly_container);
+        hourlyContainer.removeAllViews(); // Clear previous entries
+
+        LayoutInflater inflater = LayoutInflater.from(this);
+
+// Generate mock weather data
+        weatherResponse = MockWeatherData.generateMockData();
+
+        if (weatherResponse.hourly != null && !weatherResponse.hourly.isEmpty()) {
+            Log.d("WeatherApp", "Hourly data size: " + weatherResponse.hourly.size());
+
+            for (int i = 0; i < Math.min(12, weatherResponse.hourly.size()); i++) {
+                WeatherResponse.Hourly hourly = weatherResponse.hourly.get(i);
+                View itemView = inflater.inflate(R.layout.hourly_forecast_item, hourlyContainer, false);
+
+                // Set hour
+                TextView hourText = itemView.findViewById(R.id.p_time);
+                long unixTime = hourly.dt * 1000L;
+                String formattedHour = new SimpleDateFormat("ha", Locale.getDefault()).format(new Date(unixTime));
+                Log.d("WeatherApp", "Formatted hour: " + formattedHour);
+                hourText.setText(formattedHour); // e.g., "3PM"
+
+                // Set temperature
+                TextView tempText = itemView.findViewById(R.id.p_weather_temp);
+                tempText.setText(String.format(Locale.getDefault(), "%.0f°C", hourly.temp));
+
+                // Set icon
+                ImageView iconView = itemView.findViewById(R.id.p_weather_time_icon);
+                if (hourly.weather != null && !hourly.weather.isEmpty()) {
+                    iconCode = hourly.weather.get(0).icon;
+                    int iconRes = getWeatherIconResource(iconCode);
+                    Log.d("WeatherApp", "Icon resource: " + iconRes);
+                    iconView.setImageResource(iconRes);
+                }
+
+                // Add to parent layout
+                hourlyContainer.addView(itemView);
+            }
+        } else {
+            Log.d("WeatherApp", "No hourly data available");
+        }
+
+
     }
 
     private int getWeatherIconResource(String iconCode) {
@@ -205,4 +297,5 @@ public class MainActivity extends AppCompatActivity {
             Toast.makeText(this, "Permission Denied", Toast.LENGTH_SHORT).show();
         }
     }
+
 }

@@ -4,4 +4,6 @@
     <string name="welcome_page_string_2">Get to know your weather maps and radar precipitation forecast</string>
     <string name="gs">Get Started</string>
     <string name="icon">Welcome page icon, No need to alter this!</string>
+    <!-- TODO: Remove or change this placeholder text -->
+    <string name="hello_blank_fragment">Hello blank fragment</string>
 </resources>

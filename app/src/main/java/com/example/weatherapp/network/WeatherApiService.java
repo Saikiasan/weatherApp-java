@@ -26,4 +26,6 @@ public interface WeatherApiService {
             @Query("units") String units, // "metric" or "imperial"
             @Query("exclude") String exclude // Optionally exclude parts like "current", "minutely" if not needed
     );
+
+
 }
