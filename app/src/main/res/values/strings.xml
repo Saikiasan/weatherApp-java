@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">WeatherApp</string>
+    <string name="welcome_page_string_1">Discover the Weather in Your City</string>
+    <string name="welcome_page_string_2">Get to know your weather maps and radar precipitation forecast</string>
+    <string name="gs">Get Started</string>
+    <string name="icon">Welcome page icon, No need to alter this!</string>
+</resources>
